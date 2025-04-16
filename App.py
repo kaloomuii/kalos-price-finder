@@ -1,58 +1,53 @@
 import streamlit as st
-import pandas as pd
+import requests
+from bs4 import BeautifulSoup
 
-# Set page config
-st.set_page_config(page_title="Kalos Price Finder", layout="centered")
+# Load password from Streamlit secrets
+PASSWORD = st.secrets["password"]
 
-# --- PASSWORD PROTECTION ---
-PASSWORD = "kalos123"
-
-def password_protect():
-    if "authenticated" not in st.session_state:
-        st.session_state["authenticated"] = False
-
-    if not st.session_state["authenticated"]:
-        pwd = st.text_input("Enter password:", type="password")
-        if pwd == PASSWORD:
-            st.session_state["authenticated"] = True
-            st.success("Password correct!")
-            st.experimental_rerun()
+# Simple password protection
+def check_password():
+    def password_entered():
+        if st.session_state["password"] == PASSWORD:
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]  # Remove it from memory
         else:
-            if pwd:
-                st.error("Incorrect password")
-            st.stop()
+            st.session_state["password_correct"] = False
 
-password_protect()
+    if "password_correct" not in st.session_state:
+        st.text_input("Enter Password:", type="password", on_change=password_entered, key="password")
+        return False
+    elif not st.session_state["password_correct"]:
+        st.text_input("Enter Password:", type="password", on_change=password_entered, key="password")
+        st.error("Incorrect password.")
+        return False
+    else:
+        return True
 
-# --- APP TITLE AND DESCRIPTION ---
-st.title("Kalos Price Finder")
-st.write("Welcome to Kalos Price Finder! Use the search box to find trending products, compare prices, and save your favorites.")
+# App logic only runs if password is correct
+if check_password():
+    st.title("Kalos Price Finder")
 
-# --- SEARCH INTERFACE ---
-query = st.text_input("Search for a product", "")
+    query = st.text_input("Search for a product")
 
-# --- MOCK DATA FOR DEMO ---
-# In the future, this data will come from live web scraping.
-data = [
-    {"Product": "Wireless Earbuds", "Price": "$19.99", "Supplier": "AliExpress"},
-    {"Product": "LED Strip Lights", "Price": "$12.49", "Supplier": "Amazon"},
-    {"Product": "Portable Blender", "Price": "$24.95", "Supplier": "Temu"},
-    {"Product": "Phone Tripod", "Price": "$9.99", "Supplier": "eBay"},
-    {"Product": "Smart Watch", "Price": "$34.99", "Supplier": "AliExpress"},
-]
+    if query:
+        st.write(f"Searching for **{query}**...")
 
-df = pd.DataFrame(data)
+        # Simple scraping logic (placeholder - you can upgrade it later)
+        headers = {
+            "User-Agent": "Mozilla/5.0"
+        }
 
-# --- FILTER BASED ON SEARCH ---
-if query:
-    df = df[df["Product"].str.contains(query, case=False, na=False)]
+        urls = [
+            f"https://www.ebay.com/sch/i.html?_nkw={query}",
+            f"https://www.amazon.com/s?k={query.replace(' ', '+')}",
+        ]
 
-st.subheader("Results")
-st.dataframe(df)
-
-# --- FAVORITE FEATURE ---
-favorites = st.multiselect("Select products to favorite", options=df["Product"].tolist())
-if favorites:
-    st.success("Favorites: " + ", ".join(favorites))
-
-st.write("This is a demo version of Kalos Price Finder. In the future, this app will scrape real trending products and compare prices.")
+        for url in urls:
+            try:
+                res = requests.get(url, headers=headers)
+                soup = BeautifulSoup(res.text, 'html.parser')
+                st.write(f"Results from [{url}]({url}):")
+                st.code(soup.title.string if soup.title else "No title found")
+            except Exception as e:
+                st.warning(f"Failed to scrape {url}: {e}")
